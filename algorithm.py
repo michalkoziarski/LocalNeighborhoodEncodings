@@ -29,6 +29,31 @@ def _get_n_same_class_neighbors_vector(
     return n_same_class_neighbors_vector
 
 
+def _get_encoding_mask(
+    k: int,
+    y: np.ndarray,
+    n_same_class_neighbors_vector: np.ndarray,
+    minority_class: int,
+    majority_class: int,
+) -> dict:
+    """
+    Helper for calculating encoding mask, containing the information about which
+    types of observation are present in the dataset for both majority and the
+    minority class. Used to exclude unavailable types of observations from the
+    final neighborhood encoding.
+    """
+    mask = {"oversampling": {}, "undersampling": {}}
+
+    for i in range(k + 1):
+        for resampling, cls in zip(mask.keys(), [minority_class, majority_class]):
+            if i in n_same_class_neighbors_vector[y == cls]:
+                mask[resampling][i] = True
+            else:
+                mask[resampling][i] = False
+
+    return mask
+
+
 class LNE:
     def __init__(
         self,
@@ -46,6 +71,8 @@ class LNE:
         self.ratio = ratio
         self.random_state = random_state
 
+        self.encoding_mask = None
+
     def fit_resample(
         self, X: np.ndarray, y: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -55,7 +82,11 @@ class LNE:
                 f"received number of classes: {len(set(y))}."
             )
 
-        majority_class = Counter(y).most_common()[0][0]
         minority_class = Counter(y).most_common()[1][0]
+        majority_class = Counter(y).most_common()[0][0]
 
         n_same_class_neighbors_vector = _get_n_same_class_neighbors_vector(X, y, self.k)
+
+        self.encoding_mask = _get_encoding_mask(
+            self.k, y, n_same_class_neighbors_vector, minority_class, majority_class
+        )
