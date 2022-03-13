@@ -12,8 +12,8 @@ def _get_n_same_class_neighbors_vector(
 ) -> np.ndarray:
     """
     Helper function returning a vector of same-class neighbor counts. i-th element
-    of the vector contains the number of observations in the k-neighborhood having
-    the same class label as the i-th observation.
+    of the vector contains the number of observations in the k-neighborhood of i-th
+    observation having the same class label as the i-th observation.
 
     Note that it assumes that there will be no observations with exactly the same
     features, but opposite class label: in that case the results might be distorted.
