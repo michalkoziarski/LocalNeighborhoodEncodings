@@ -150,6 +150,51 @@ def _neighborhood_encoding_to_resampling_counts(
     return counts
 
 
+def _resample_dataset(
+    X: np.ndarray,
+    y: np.ndarray,
+    resampling_counts: dict[str, dict[int, Optional[int]]],
+    eps: float,
+    neighbors_vector: np.ndarray,
+    minority_class: int,
+    majority_class: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Performs a combination of random undersampling and random oversampling
+    with noise based on the provided resampling counts dictionary.
+    """
+    X_, y_ = [], []
+
+    for n_neighbors, count in resampling_counts["oversampling"].items():
+        indices = np.where((y == minority_class) & (neighbors_vector == n_neighbors))[0]
+
+        X_.append(X[indices])
+        y_.append(y[indices])
+
+        if count is not None and count > 0:
+            sample_indices = np.random.choice(indices, size=count, replace=True)
+            samples = X[sample_indices]
+            samples += np.random.normal(size=samples.shape, scale=eps)
+
+            X_.append(samples)
+            y_.append(y[sample_indices])
+
+    for n_neighbors, count in resampling_counts["undersampling"].items():
+        if count is None:
+            continue
+
+        indices = np.where((y == majority_class) & (neighbors_vector == n_neighbors))[0]
+
+        sample_indices = np.random.choice(
+            indices, size=(len(indices) - count), replace=False
+        )
+
+        X_.append(X[sample_indices])
+        y_.append(y[sample_indices])
+
+    return np.concatenate(X_), np.concatenate(y_)
+
+
 class LNE:
     def __init__(
         self,
