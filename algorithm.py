@@ -62,26 +62,29 @@ def _get_number_of_unmasked_entries(encoding_mask: dict[str, dict[int, bool]]) -
     return sum([sum(mask.values()) for mask in encoding_mask.values()])
 
 
-def _individual_to_neighborhood_encoding(
+def _individual_to_ratio_and_neighborhood_encoding(
     individual: np.ndarray, encoding_mask: dict[str, dict[int, bool]]
-) -> dict[str, dict[int, Optional[float]]]:
+) -> tuple[float, dict[str, dict[int, Optional[float]]]]:
     """
-    Helper for converting a real-valued vector describing an individual to an
-    easier to interpret and operate on dictionary. Uses encoding mask to exclude
-    types of observations not available in the particular dataset.
+    Helper for converting a real-valued vector describing an individual to
+    oversampling ratio and an easier to interpret and operate on dictionary.
+    Uses encoding mask to exclude types of observations not available in the
+    particular dataset.
     """
     encoding = {"oversampling": {}, "undersampling": {}}
 
     n_unmasked_values = _get_number_of_unmasked_entries(encoding_mask)
 
-    if n_unmasked_values != len(individual):
+    if n_unmasked_values + 1 != len(individual):
         raise ValueError(
-            f"The number of unmasked values ({n_unmasked_values}) "
+            f"The number of unmasked values ({n_unmasked_values}) + 1 (ratio) "
             f"does not match the length of the individual ({len(individual)}) "
             f"for the mask = {encoding_mask}."
         )
 
-    position = 0
+    oversampling_ratio = individual[0]
+
+    position = 1
 
     for resampling in encoding_mask.keys():
         for i, is_present in encoding_mask[resampling].items():
@@ -91,16 +94,24 @@ def _individual_to_neighborhood_encoding(
             else:
                 encoding[resampling][i] = None
 
-    return encoding
+    return oversampling_ratio, encoding
 
 
 def _neighborhood_encoding_to_resampling_counts(
     y: np.ndarray,
     neighbors_vector: np.ndarray,
+    oversampling_ratio: float,
     neighborhood_encoding: dict[str, dict[int, Optional[float]]],
     minority_class: int,
     majority_class: int,
 ) -> dict[str, dict[int, Optional[int]]]:
+    """
+    Helper converting neighborhood encoding to a concrete resampling counts
+    for a specific dataset. For undersampling, for each encoding key/value pair
+    it simply .... For oversampling, it bounds the total number
+    """
+    neighborhood_encoding = neighborhood_encoding.copy()
+
     counts = {"oversampling": {}, "undersampling": {}}
 
     for n_neighbors, value in neighborhood_encoding["undersampling"].items():
@@ -113,7 +124,24 @@ def _neighborhood_encoding_to_resampling_counts(
 
             counts["undersampling"][n_neighbors] = int(np.round(value * n_observations))
 
-    # TODO : finish for oversampling
+    n_minority = sum(y == minority_class)
+    n_majority = sum(y == majority_class)
+
+    n_oversampling = int(np.round((n_majority - n_minority) * oversampling_ratio))
+
+    total = sum(
+        value
+        for value in neighborhood_encoding["oversampling"].values()
+        if value is not None
+    )
+
+    for n_neighbors, value in neighborhood_encoding["oversampling"].items():
+        if value is None:
+            counts["oversampling"][n_neighbors] = None
+        else:
+            counts["oversampling"][n_neighbors] = int(
+                np.round(value / total * n_oversampling)
+            )
 
     return counts
 
@@ -125,14 +153,12 @@ class LNE:
         k: int = 5,
         eps: float = 0.0,
         metric: callable = roc_auc_score,
-        ratio: float = 1.0,
         random_state: Optional[Union[int, np.random.RandomState]] = None,
     ):
         self.estimator = estimator
         self.k = k
         self.eps = eps
         self.metric = metric
-        self.ratio = ratio
         self.random_state = random_state
 
         self.encoding_mask = None
