@@ -108,7 +108,11 @@ def _neighborhood_encoding_to_resampling_counts(
     """
     Helper converting neighborhood encoding to a concrete resampling counts
     for a specific dataset. For undersampling, for each encoding key/value pair
-    it simply .... For oversampling, it bounds the total number
+    it simply removes the proportion of observations of a given type (key)
+    specified by value. For oversampling, it calculates the total number of
+    observations that should be generated based on the provided oversampling
+    ratio, and afterwards calculates the proportion for each observation type
+    based on the relative values.
     """
     neighborhood_encoding = neighborhood_encoding.copy()
 
