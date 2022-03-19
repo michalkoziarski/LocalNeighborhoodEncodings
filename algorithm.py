@@ -22,7 +22,6 @@ def _get_n_same_class_neighbors_vector(
     Note that it assumes that there will be no observations with exactly the same
     features, but opposite class label: in that case the results might be distorted.
     """
-
     neighbors_vector = np.empty(len(y), dtype=np.uint)
     nn = NearestNeighbors(n_neighbors=(k + 1)).fit(X)
 
