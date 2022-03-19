@@ -2,7 +2,11 @@ from collections import Counter
 from typing import Optional, Union
 
 import numpy as np
-from sklearn.base import BaseEstimator
+from pymoo.algorithms.soo.nonconvex.de import DE
+from pymoo.core.algorithm import Algorithm
+from pymoo.core.problem import ElementwiseProblem
+from pymoo.optimize import minimize
+from sklearn.base import BaseEstimator, clone
 from sklearn.metrics import roc_auc_score
 from sklearn.neighbors import NearestNeighbors
 
@@ -195,21 +199,132 @@ def _resample_dataset(
     return np.concatenate(X_), np.concatenate(y_)
 
 
+def _use_individual_to_resample_dataset(
+    individual: np.ndarray,
+    X: np.ndarray,
+    y: np.ndarray,
+    eps: float,
+    neighbors_vector: np.ndarray,
+    encoding_mask: dict[str, dict[int, bool]],
+    minority_class: int,
+    majority_class: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Combines previous functions to convert an individual to resampled dataset
+    in a single step.
+    """
+    (
+        oversampling_ratio,
+        neighborhood_encoding,
+    ) = _individual_to_ratio_and_neighborhood_encoding(individual, encoding_mask)
+
+    resampling_counts = _neighborhood_encoding_to_resampling_counts(
+        y,
+        neighbors_vector,
+        oversampling_ratio,
+        neighborhood_encoding,
+        minority_class,
+        majority_class,
+    )
+
+    X_, y_ = _resample_dataset(
+        X,
+        y,
+        resampling_counts,
+        eps,
+        neighbors_vector,
+        minority_class,
+        majority_class,
+    )
+
+    return X_, y_
+
+
+def _get_minority_majority_class(y: np.ndarray) -> tuple[int, int]:
+    minority_class = Counter(y).most_common()[1][0]
+    majority_class = Counter(y).most_common()[0][0]
+
+    return minority_class, majority_class
+
+
+class _LNEProblem(ElementwiseProblem):
+    def __init__(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        estimator: BaseEstimator,
+        eps: float,
+        metric: callable,
+        metric_proba: bool,
+        neighbors_vector: np.ndarray,
+        encoding_mask: dict[str, dict[int, bool]],
+    ):
+        self.X = X
+        self.y = y
+        self.estimator = estimator
+        self.eps = eps
+        self.metric = metric
+        self.metric_proba = metric_proba
+        self.neighbors_vector = neighbors_vector
+        self.encoding_mask = encoding_mask
+
+        self.n_variables = _get_number_of_unmasked_entries(encoding_mask) + 1
+        self.minority_class, self.majority_class = _get_minority_majority_class(y)
+
+        super().__init__(n_var=self.n_variables, n_obj=1, xl=0.0, xu=1.0)
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        X_, y_ = _use_individual_to_resample_dataset(
+            x,
+            self.X,
+            self.y,
+            self.eps,
+            self.neighbors_vector,
+            self.encoding_mask,
+            self.minority_class,
+            self.majority_class,
+        )
+
+        estimator = clone(self.estimator)
+        estimator.fit(X_, y_)
+
+        if self.metric_proba:
+            score = self.metric(self.y, estimator.predict_proba(self.X)[:, 1])
+        else:
+            score = self.metric(self.y, estimator.predict(self.X))
+
+        out["F"] = -score
+
+
 class LNE:
     def __init__(
         self,
         estimator: BaseEstimator,
         k: int = 5,
+        algorithm: Algorithm = DE,
+        algorithm_kwargs: Optional[dict] = None,
         eps: float = 0.0,
         metric: callable = roc_auc_score,
+        metric_proba: bool = True,
+        verbose: bool = False,
         random_state: Optional[Union[int, np.random.RandomState]] = None,
     ):
         self.estimator = estimator
         self.k = k
+        self.algorithm = algorithm
+
+        if algorithm_kwargs is None:
+            self.algorithm_kwargs = {}
+        else:
+            self.algorithm_kwargs = algorithm_kwargs
+
         self.eps = eps
         self.metric = metric
+        self.metric_proba = metric_proba
+        self.verbose = verbose
         self.random_state = random_state
 
+        self.neighbors_vector = None
         self.encoding_mask = None
 
     def fit_resample(
@@ -221,11 +336,40 @@ class LNE:
                 f"received number of classes: {len(set(y))}."
             )
 
-        minority_class = Counter(y).most_common()[1][0]
-        majority_class = Counter(y).most_common()[0][0]
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
 
-        neighbors_vector = _get_n_same_class_neighbors_vector(X, y, self.k)
+        minority_class, majority_class = _get_minority_majority_class(y)
 
+        self.neighbors_vector = _get_n_same_class_neighbors_vector(X, y, self.k)
         self.encoding_mask = _get_encoding_mask(
-            y, self.k, neighbors_vector, minority_class, majority_class
+            y, self.k, self.neighbors_vector, minority_class, majority_class
         )
+
+        problem = _LNEProblem(
+            X,
+            y,
+            self.estimator,
+            self.eps,
+            self.metric,
+            self.metric_proba,
+            self.neighbors_vector,
+            self.encoding_mask,
+        )
+        algorithm = self.algorithm(**self.algorithm_kwargs)
+        result = minimize(
+            problem, algorithm, seed=self.random_state, verbose=self.verbose
+        )
+
+        X_, y_ = _use_individual_to_resample_dataset(
+            result.X,
+            X,
+            y,
+            self.eps,
+            self.neighbors_vector,
+            self.encoding_mask,
+            minority_class,
+            majority_class,
+        )
+
+        return X_, y_
