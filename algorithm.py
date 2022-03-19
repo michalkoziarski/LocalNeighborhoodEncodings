@@ -292,7 +292,7 @@ class _LNEProblem(ElementwiseProblem):
         else:
             score = self.metric(self.y, estimator.predict(self.X))
 
-        out["F"] = -score
+        out["F"] = 1.0 - score
 
 
 class LNE:
