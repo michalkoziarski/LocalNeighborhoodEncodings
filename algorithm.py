@@ -272,7 +272,7 @@ class _LNEProblem(ElementwiseProblem):
 
         super().__init__(n_var=self.n_variables, n_obj=1, xl=0.0, xu=1.0)
 
-    def _evaluate(self, x, out, *args, **kwargs):
+    def _evaluate(self, x, out, *args, **kwargs) -> None:
         X_, y_ = _use_individual_to_resample_dataset(
             x,
             self.X,
@@ -283,6 +283,11 @@ class _LNEProblem(ElementwiseProblem):
             self.minority_class,
             self.majority_class,
         )
+
+        if len(np.unique(y_)) < 2:
+            out["F"] = 1.0
+
+            return
 
         estimator = clone(self.estimator)
         estimator.fit(X_, y_)
