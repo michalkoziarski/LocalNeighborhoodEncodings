@@ -153,7 +153,7 @@ def _neighborhood_encoding_to_resampling_counts(
     return counts
 
 
-def _resample_dataset(
+def _use_counts_to_resample_dataset(
     X: np.ndarray,
     y: np.ndarray,
     resampling_counts: dict[str, dict[int, Optional[int]]],
@@ -226,7 +226,7 @@ def _use_individual_to_resample_dataset(
         majority_class,
     )
 
-    X_, y_ = _resample_dataset(
+    X_, y_ = _use_counts_to_resample_dataset(
         X,
         y,
         resampling_counts,
@@ -239,7 +239,7 @@ def _use_individual_to_resample_dataset(
     return X_, y_
 
 
-def _get_minority_majority_class(y: np.ndarray) -> tuple[int, int]:
+def _get_minority_and_majority_class(y: np.ndarray) -> tuple[int, int]:
     minority_class = Counter(y).most_common()[1][0]
     majority_class = Counter(y).most_common()[0][0]
 
@@ -268,7 +268,7 @@ class _LNEProblem(ElementwiseProblem):
         self.encoding_mask = encoding_mask
 
         self.n_variables = _get_number_of_unmasked_entries(encoding_mask) + 1
-        self.minority_class, self.majority_class = _get_minority_majority_class(y)
+        self.minority_class, self.majority_class = _get_minority_and_majority_class(y)
 
         super().__init__(n_var=self.n_variables, n_obj=1, xl=0.0, xu=1.0)
 
@@ -343,7 +343,7 @@ class LNE:
         if self.random_state is not None:
             np.random.seed(self.random_state)
 
-        minority_class, majority_class = _get_minority_majority_class(y)
+        minority_class, majority_class = _get_minority_and_majority_class(y)
 
         self.neighbors_vector = _get_n_same_class_neighbors_vector(X, y, self.k)
         self.encoding_mask = _get_encoding_mask(
