@@ -8,6 +8,7 @@ from pymoo.core.problem import ElementwiseProblem
 from pymoo.optimize import minimize
 from sklearn.base import BaseEstimator, clone
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import StratifiedKFold
 from sklearn.neighbors import NearestNeighbors
 
 
@@ -154,9 +155,10 @@ def _neighborhood_encoding_to_resampling_counts(
 
 
 def _use_counts_to_resample_dataset(
+    resampling_counts: dict[str, dict[int, Optional[int]]],
     X: np.ndarray,
     y: np.ndarray,
-    resampling_counts: dict[str, dict[int, Optional[int]]],
+    *,
     eps: float,
     neighbors_vector: np.ndarray,
     minority_class: int,
@@ -202,6 +204,7 @@ def _use_individual_to_resample_dataset(
     individual: np.ndarray,
     X: np.ndarray,
     y: np.ndarray,
+    *,
     eps: float,
     neighbors_vector: np.ndarray,
     encoding_mask: dict[str, dict[int, bool]],
@@ -227,13 +230,13 @@ def _use_individual_to_resample_dataset(
     )
 
     X_, y_ = _use_counts_to_resample_dataset(
+        resampling_counts,
         X,
         y,
-        resampling_counts,
-        eps,
-        neighbors_vector,
-        minority_class,
-        majority_class,
+        eps=eps,
+        neighbors_vector=neighbors_vector,
+        minority_class=minority_class,
+        majority_class=majority_class,
     )
 
     return X_, y_
@@ -251,6 +254,9 @@ class _LNEProblem(ElementwiseProblem):
         self,
         X: np.ndarray,
         y: np.ndarray,
+        *,
+        splitting_strategy: str,
+        n_splits: int,
         estimator: BaseEstimator,
         eps: float,
         metric: callable,
@@ -258,8 +264,12 @@ class _LNEProblem(ElementwiseProblem):
         neighbors_vector: np.ndarray,
         encoding_mask: dict[str, dict[int, bool]],
     ):
+        assert splitting_strategy in ["none", "random", "even"]
+
         self.X = X
         self.y = y
+        self.splitting_strategy = splitting_strategy
+        self.n_splits = n_splits
         self.estimator = estimator
         self.eps = eps
         self.metric = metric
@@ -267,37 +277,59 @@ class _LNEProblem(ElementwiseProblem):
         self.neighbors_vector = neighbors_vector
         self.encoding_mask = encoding_mask
 
+        if splitting_strategy == "none":
+            self.folds = [((X, y, neighbors_vector), (X, y))]
+        elif splitting_strategy == "random":
+            self.folds = []
+
+            for train_index, test_index in StratifiedKFold(n_splits=n_splits).split(
+                X, y
+            ):
+                self.folds.append(
+                    (
+                        (X[train_index], y[train_index], neighbors_vector[train_index]),
+                        (X[test_index], y[test_index]),
+                    )
+                )
+        else:
+            raise NotImplementedError
+
         self.n_variables = _get_number_of_unmasked_entries(encoding_mask) + 1
         self.minority_class, self.majority_class = _get_minority_and_majority_class(y)
 
         super().__init__(n_var=self.n_variables, n_obj=1, xl=0.0, xu=1.0)
 
     def _evaluate(self, x, out, *args, **kwargs) -> None:
-        X_, y_ = _use_individual_to_resample_dataset(
-            x,
-            self.X,
-            self.y,
-            self.eps,
-            self.neighbors_vector,
-            self.encoding_mask,
-            self.minority_class,
-            self.majority_class,
-        )
+        scores = []
 
-        if len(np.unique(y_)) < 2:
-            out["F"] = 1.0
+        for (X_train, y_train, neighbors_vector), (X_test, y_test) in self.folds:
+            X_train_, y_train_ = _use_individual_to_resample_dataset(
+                x,
+                X_train,
+                y_train,
+                eps=self.eps,
+                neighbors_vector=neighbors_vector,
+                encoding_mask=self.encoding_mask,
+                minority_class=self.minority_class,
+                majority_class=self.majority_class,
+            )
 
-            return
+            if len(np.unique(y_train_)) < 2:
+                out["F"] = 1.0
 
-        estimator = clone(self.estimator)
-        estimator.fit(X_, y_)
+                return
 
-        if self.metric_proba:
-            score = self.metric(self.y, estimator.predict_proba(self.X)[:, 1])
-        else:
-            score = self.metric(self.y, estimator.predict(self.X))
+            estimator = clone(self.estimator)
+            estimator.fit(X_train_, y_train_)
 
-        out["F"] = 1.0 - score
+            if self.metric_proba:
+                score = self.metric(y_test, estimator.predict_proba(X_test)[:, 1])
+            else:
+                score = self.metric(y_test, estimator.predict(X_test))
+
+            scores.append(score)
+
+        out["F"] = 1.0 - np.mean(scores)
 
 
 class LNE:
@@ -305,6 +337,8 @@ class LNE:
         self,
         estimator: BaseEstimator,
         k: int = 5,
+        splitting_strategy: str = "random",
+        n_splits: int = 2,
         algorithm: Algorithm = DE,
         algorithm_kwargs: Optional[dict] = None,
         eps: float = 0.0,
@@ -315,6 +349,8 @@ class LNE:
     ):
         self.estimator = estimator
         self.k = k
+        self.splitting_strategy = splitting_strategy
+        self.n_splits = n_splits
         self.algorithm = algorithm
 
         if algorithm_kwargs is None:
@@ -353,12 +389,14 @@ class LNE:
         problem = _LNEProblem(
             X,
             y,
-            self.estimator,
-            self.eps,
-            self.metric,
-            self.metric_proba,
-            self.neighbors_vector,
-            self.encoding_mask,
+            splitting_strategy=self.splitting_strategy,
+            n_splits=self.n_splits,
+            estimator=self.estimator,
+            eps=self.eps,
+            metric=self.metric,
+            metric_proba=self.metric_proba,
+            neighbors_vector=self.neighbors_vector,
+            encoding_mask=self.encoding_mask,
         )
         algorithm = self.algorithm(**self.algorithm_kwargs)
         result = minimize(
@@ -369,11 +407,11 @@ class LNE:
             result.X,
             X,
             y,
-            self.eps,
-            self.neighbors_vector,
-            self.encoding_mask,
-            minority_class,
-            majority_class,
+            eps=self.eps,
+            neighbors_vector=self.neighbors_vector,
+            encoding_mask=self.encoding_mask,
+            minority_class=minority_class,
+            majority_class=majority_class,
         )
 
         return X_, y_
