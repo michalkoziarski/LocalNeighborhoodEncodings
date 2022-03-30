@@ -1,5 +1,5 @@
 from collections import Counter
-from typing import Optional, Union
+from typing import Optional, Type, Union
 
 import numpy as np
 from pymoo.algorithms.soo.nonconvex.de import DE
@@ -339,7 +339,7 @@ class LNE:
         k: int = 5,
         splitting_strategy: str = "random",
         n_splits: int = 2,
-        algorithm: Algorithm = DE,
+        algorithm: Type[Algorithm] = DE,
         algorithm_kwargs: Optional[dict] = None,
         eps: float = 0.0,
         metric: callable = roc_auc_score,
