@@ -38,6 +38,8 @@ def evaluate_trial(k, fold):
         rows = []
 
         for classifier_name in classifiers.keys():
+            logging.info(f"Evaluating {classifier_name}...")
+
             dataset = datasets.load(dataset_name)
             classifier = classifiers[classifier_name]
 
@@ -56,7 +58,7 @@ def evaluate_trial(k, fold):
 
             clf = classifier.fit(X_train, y_train)
             predictions = clf.predict(X_test)
-            proba = clf.predict_proba(X_test)[:, minority_class]
+            proba = clf.predict_proba(X_test)[:, int(minority_class)]
 
             scoring_functions = {
                 "Precision": metrics.precision,
