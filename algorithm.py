@@ -8,7 +8,7 @@ from pymoo.core.problem import ElementwiseProblem
 from pymoo.optimize import minimize
 from sklearn.base import BaseEstimator, clone
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.neighbors import NearestNeighbors
 
 
@@ -257,6 +257,7 @@ class _LNEProblem(ElementwiseProblem):
         *,
         splitting_strategy: str,
         n_splits: int,
+        n_repeats: int,
         estimator: BaseEstimator,
         eps: float,
         metric: callable,
@@ -264,12 +265,13 @@ class _LNEProblem(ElementwiseProblem):
         neighbors_vector: np.ndarray,
         encoding_mask: dict[str, dict[int, bool]],
     ):
-        assert splitting_strategy in ["none", "random", "even"]
+        assert splitting_strategy in ["none", "random"]
 
         self.X = X
         self.y = y
         self.splitting_strategy = splitting_strategy
         self.n_splits = n_splits
+        self.n_repeats = n_repeats
         self.estimator = estimator
         self.eps = eps
         self.metric = metric
@@ -282,9 +284,9 @@ class _LNEProblem(ElementwiseProblem):
         elif splitting_strategy == "random":
             self.folds = []
 
-            for train_index, test_index in StratifiedKFold(n_splits=n_splits).split(
-                X, y
-            ):
+            for train_index, test_index in RepeatedStratifiedKFold(
+                n_splits=n_splits, n_repeats=n_repeats
+            ).split(X, y):
                 self.folds.append(
                     (
                         (X[train_index], y[train_index], neighbors_vector[train_index]),
@@ -339,6 +341,7 @@ class LNE:
         k: int = 5,
         splitting_strategy: str = "random",
         n_splits: int = 2,
+        n_repeats: int = 5,
         algorithm: Type[Algorithm] = DE,
         algorithm_kwargs: Optional[dict] = None,
         eps: float = 0.0,
@@ -351,6 +354,7 @@ class LNE:
         self.k = k
         self.splitting_strategy = splitting_strategy
         self.n_splits = n_splits
+        self.n_repeats = n_repeats
         self.algorithm = algorithm
 
         if algorithm_kwargs is None:
@@ -391,6 +395,7 @@ class LNE:
             y,
             splitting_strategy=self.splitting_strategy,
             n_splits=self.n_splits,
+            n_repeats=self.n_repeats,
             estimator=self.estimator,
             eps=self.eps,
             metric=self.metric,
