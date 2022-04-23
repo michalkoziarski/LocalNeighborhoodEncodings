@@ -7,9 +7,10 @@ from pymoo.core.algorithm import Algorithm
 from pymoo.core.problem import ElementwiseProblem
 from pymoo.optimize import minimize
 from sklearn.base import BaseEstimator, clone
-from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.neighbors import NearestNeighbors
+
+from metrics import auc
 
 
 def _get_n_same_class_neighbors_vector(
@@ -345,7 +346,7 @@ class LNE:
         algorithm: Type[Algorithm] = DE,
         algorithm_kwargs: Optional[dict] = None,
         eps: float = 0.0,
-        metric: callable = roc_auc_score,
+        metric: callable = auc,
         metric_proba: bool = True,
         verbose: bool = False,
         random_state: Optional[Union[int, np.random.RandomState]] = None,
