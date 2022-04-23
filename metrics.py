@@ -28,9 +28,10 @@ def recall(ground_truth, predictions, minority_class=None):
     )
 
 
+@metric_decorator
+def auc(ground_truth, predictions, minority_class=None):
+    return average_precision_score(ground_truth, predictions, pos_label=minority_class)
+
+
 def g_mean(ground_truth, predictions):
     return geometric_mean_score(ground_truth, predictions)
-
-
-def auc(ground_truth, predictions):
-    return average_precision_score(ground_truth, predictions)
