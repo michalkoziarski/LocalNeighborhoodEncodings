@@ -174,6 +174,9 @@ def _use_counts_to_resample_dataset(
     for n_neighbors, count in resampling_counts["oversampling"].items():
         indices = np.where((y == minority_class) & (neighbors_vector == n_neighbors))[0]
 
+        if len(indices) == 0:
+            continue
+
         X_.append(X[indices])
         y_.append(y[indices])
 
@@ -190,6 +193,9 @@ def _use_counts_to_resample_dataset(
             continue
 
         indices = np.where((y == majority_class) & (neighbors_vector == n_neighbors))[0]
+
+        if len(indices) == 0:
+            continue
 
         sample_indices = np.random.choice(
             indices, size=(len(indices) - count), replace=False
