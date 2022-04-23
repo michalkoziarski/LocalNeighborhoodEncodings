@@ -332,7 +332,7 @@ class _LNEProblem(ElementwiseProblem):
 
             scores.append(score)
 
-        out["F"] = 1.0 - np.mean(scores)
+        out["F"] = -np.mean(scores)
 
 
 class LNE:
