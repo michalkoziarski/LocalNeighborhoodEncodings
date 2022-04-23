@@ -31,6 +31,8 @@ def evaluate_trial(k, fold):
         trial_path = RESULTS_PATH / f"{trial_name}.csv"
 
         if trial_path.exists():
+            logging.info(f"Skipping {trial_name} (results already present)...")
+
             continue
 
         logging.info(f"Evaluating {trial_name}...")
