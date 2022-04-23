@@ -341,7 +341,7 @@ class LNE:
         k: int = 5,
         splitting_strategy: str = "random",
         n_splits: int = 2,
-        n_repeats: int = 5,
+        n_repeats: int = 3,
         algorithm: Type[Algorithm] = DE,
         algorithm_kwargs: Optional[dict] = None,
         eps: float = 0.0,
