@@ -382,6 +382,10 @@ class LNE:
 
         self.neighbors_vector = None
         self.encoding_mask = None
+        self.solution = None
+        self.oversampling_ratio = None
+        self.neighborhood_encoding = None
+        self.resampling_counts = None
 
     def fit_resample(
         self, X: np.ndarray, y: np.ndarray
@@ -420,8 +424,26 @@ class LNE:
             problem, algorithm, seed=self.random_state, verbose=self.verbose
         )
 
+        self.solution = result.X
+
+        (
+            self.oversampling_ratio,
+            self.neighborhood_encoding,
+        ) = _individual_to_ratio_and_neighborhood_encoding(
+            self.solution, self.encoding_mask
+        )
+
+        self.resampling_counts = _neighborhood_encoding_to_resampling_counts(
+            y,
+            self.neighbors_vector,
+            self.oversampling_ratio,
+            self.neighborhood_encoding,
+            minority_class,
+            majority_class,
+        )
+
         X_, y_ = _use_individual_to_resample_dataset(
-            result.X,
+            self.solution,
             X,
             y,
             eps=self.eps,

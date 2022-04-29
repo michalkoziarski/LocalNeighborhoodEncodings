@@ -1,5 +1,6 @@
 import argparse
 import logging
+import pickle
 from collections import Counter
 from pathlib import Path
 
@@ -17,7 +18,11 @@ from algorithm import LNE
 
 def evaluate_trial(k, fold):
     RESULTS_PATH = Path(__file__).parents[0] / "results"
+    STATS_PATH = Path(__file__).parents[0] / "stats"
     RANDOM_STATE = 42
+
+    for path in [RESULTS_PATH, STATS_PATH]:
+        path.mkdir(exist_ok=True, parents=True)
 
     for dataset_name in datasets.names():
         classifiers = {
@@ -58,6 +63,21 @@ def evaluate_trial(k, fold):
             except RuntimeError:
                 continue
 
+            stats_path = (
+                STATS_PATH / f"{dataset_name}_{fold}_{classifier_name}_LNE_{k}.p"
+            )
+            stats = {
+                "encoding_mask": resampler.encoding_mask,
+                "neighbors_vector": resampler.neighbors_vector,
+                "solution": resampler.solution,
+                "oversampling_ratio": resampler.oversampling_ratio,
+                "neighborhood_encoding": resampler.neighborhood_encoding,
+                "resampling_counts": resampler.resampling_counts,
+            }
+
+            with open(stats_path, "wb") as f:
+                pickle.dump(stats, f)
+
             clf = classifier.fit(X_train, y_train)
             predictions = clf.predict(X_test)
             proba = clf.predict_proba(X_test)[:, int(minority_class)]
@@ -88,8 +108,6 @@ def evaluate_trial(k, fold):
                 rows.append(row)
 
         columns = ["Dataset", "Fold", "Classifier", "Resampler", "Metric", "Score"]
-
-        RESULTS_PATH.mkdir(exist_ok=True, parents=True)
 
         pd.DataFrame(rows, columns=columns).to_csv(trial_path, index=False)
 
