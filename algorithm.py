@@ -312,16 +312,21 @@ class _LNEProblem(ElementwiseProblem):
         scores = []
 
         for (X_train, y_train, neighbors_vector), (X_test, y_test) in self.folds:
-            X_train_, y_train_ = _use_individual_to_resample_dataset(
-                x,
-                X_train,
-                y_train,
-                eps=self.eps,
-                neighbors_vector=neighbors_vector,
-                encoding_mask=self.encoding_mask,
-                minority_class=self.minority_class,
-                majority_class=self.majority_class,
-            )
+            try:
+                X_train_, y_train_ = _use_individual_to_resample_dataset(
+                    x,
+                    X_train,
+                    y_train,
+                    eps=self.eps,
+                    neighbors_vector=neighbors_vector,
+                    encoding_mask=self.encoding_mask,
+                    minority_class=self.minority_class,
+                    majority_class=self.majority_class,
+                )
+            except ValueError:
+                out["F"] = 1.0
+
+                return
 
             if len(np.unique(y_train_)) < 2:
                 out["F"] = 1.0
