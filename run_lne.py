@@ -24,7 +24,7 @@ def evaluate_trial(k, fold):
             "CART": DecisionTreeClassifier(random_state=RANDOM_STATE),
             "KNN": KNeighborsClassifier(n_neighbors=3),
             "SVM": SVC(kernel="rbf", probability=True, random_state=RANDOM_STATE),
-            # 'MLP': MLPClassifier(random_state=RANDOM_STATE)
+            "MLP": MLPClassifier(random_state=RANDOM_STATE),
         }
 
         trial_name = f"{dataset_name}_{fold}_LNE_{k}"
