@@ -47,7 +47,7 @@ def evaluate_trial(k, fold):
 
             (X_train, y_train), (X_test, y_test) = dataset[fold][0], dataset[fold][1]
 
-            resampler = LNE(estimator=classifier, random_state=RANDOM_STATE)
+            resampler = LNE(k=k, estimator=classifier, random_state=RANDOM_STATE)
 
             assert len(np.unique(y_train)) == len(np.unique(y_test)) == 2
 
