@@ -81,13 +81,13 @@ def evaluate_trial(k, fold):
                     dataset_name,
                     fold,
                     classifier_name,
-                    k,
+                    f"LNE({k})",
                     scoring_function_name,
                     score,
                 ]
                 rows.append(row)
 
-        columns = ["Dataset", "Fold", "Classifier", "K", "Metric", "Score"]
+        columns = ["Dataset", "Fold", "Classifier", "Resampler", "Metric", "Score"]
 
         RESULTS_PATH.mkdir(exist_ok=True, parents=True)
 
