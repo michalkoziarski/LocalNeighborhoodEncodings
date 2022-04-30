@@ -27,7 +27,7 @@ def evaluate_trial(k, fold):
     for dataset_name in datasets.names():
         classifiers = {
             "CART": DecisionTreeClassifier(random_state=RANDOM_STATE),
-            "KNN": KNeighborsClassifier(n_neighbors=3),
+            "KNN": KNeighborsClassifier(n_neighbors=1),
             "SVM": SVC(kernel="rbf", probability=True, random_state=RANDOM_STATE),
             "MLP": MLPClassifier(random_state=RANDOM_STATE),
         }
