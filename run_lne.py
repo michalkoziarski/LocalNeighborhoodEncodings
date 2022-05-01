@@ -150,4 +150,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    evaluate_trial(args.classifier_name, args.k, args.fold)
+    evaluate_trial(args.classifier_name, args.eps, args.k, args.fold)
