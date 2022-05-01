@@ -1,7 +1,12 @@
 from collections import Counter
 
 from imblearn.metrics import geometric_mean_score
-from sklearn.metrics import average_precision_score, precision_score, recall_score
+from sklearn.metrics import (
+    average_precision_score,
+    balanced_accuracy_score,
+    precision_score,
+    recall_score,
+)
 
 
 def metric_decorator(metric_function):
@@ -31,6 +36,10 @@ def recall(ground_truth, predictions, minority_class=None):
 @metric_decorator
 def auc(ground_truth, predictions, minority_class=None):
     return average_precision_score(ground_truth, predictions, pos_label=minority_class)
+
+
+def bac(ground_truth, predictions):
+    return balanced_accuracy_score(ground_truth, predictions)
 
 
 def g_mean(ground_truth, predictions):

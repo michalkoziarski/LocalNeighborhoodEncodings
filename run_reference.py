@@ -69,6 +69,7 @@ def evaluate_trial(resampler_name, fold):
                 "Precision": metrics.precision,
                 "Recall": metrics.recall,
                 "AUC": metrics.auc,
+                "BAC": metrics.bac,
                 "G-mean": metrics.g_mean,
             }
 

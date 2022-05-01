@@ -86,6 +86,7 @@ def evaluate_trial(k, fold):
                 "Precision": metrics.precision,
                 "Recall": metrics.recall,
                 "AUC": metrics.auc,
+                "BAC": metrics.bac,
                 "G-mean": metrics.g_mean,
             }
 
