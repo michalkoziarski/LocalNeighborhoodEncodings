@@ -16,7 +16,7 @@ import metrics
 from algorithm import LNE
 
 
-def evaluate_trial(classifier_name, k, fold):
+def evaluate_trial(classifier_name, eps, k, fold):
     RESULTS_PATH = Path(__file__).parents[0] / "results"
     STATS_PATH = Path(__file__).parents[0] / "stats"
     RANDOM_STATE = 42
@@ -38,7 +38,7 @@ def evaluate_trial(classifier_name, k, fold):
             "G-mean": metrics.g_mean,
         }
 
-        resampler_name = f"LNE({k})"
+        resampler_name = f"LNE({k};{eps:.2f})"
 
         trial_name = f"{dataset_name}_{fold}_{classifier_name}_{resampler_name}"
         trial_path = RESULTS_PATH / f"{trial_name}.csv"
@@ -62,6 +62,7 @@ def evaluate_trial(classifier_name, k, fold):
 
             resampler = LNE(
                 k=k,
+                eps=eps,
                 estimator=classifier,
                 metric=criterion,
                 metric_proba=(criterion_name == "AUC"),
@@ -143,6 +144,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-classifier_name", type=str, required=True)
+    parser.add_argument("-eps", type=float, required=True)
     parser.add_argument("-fold", type=int, required=True)
     parser.add_argument("-k", type=int, required=True)
 
