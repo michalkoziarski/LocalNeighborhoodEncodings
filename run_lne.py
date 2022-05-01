@@ -16,7 +16,7 @@ import metrics
 from algorithm import LNE
 
 
-def evaluate_trial(k, fold):
+def evaluate_trial(classifier_name, k, fold):
     RESULTS_PATH = Path(__file__).parents[0] / "results"
     STATS_PATH = Path(__file__).parents[0] / "stats"
     RANDOM_STATE = 42
@@ -29,10 +29,18 @@ def evaluate_trial(k, fold):
             "CART": DecisionTreeClassifier(random_state=RANDOM_STATE),
             "KNN": KNeighborsClassifier(n_neighbors=1),
             "SVM": SVC(kernel="rbf", probability=True, random_state=RANDOM_STATE),
-            # "MLP": MLPClassifier(random_state=RANDOM_STATE),
+            "MLP": MLPClassifier(random_state=RANDOM_STATE),
         }
 
-        trial_name = f"{dataset_name}_{fold}_LNE_{k}"
+        criteria = {
+            "AUC": metrics.auc,
+            "BAC": metrics.bac,
+            "G-mean": metrics.g_mean,
+        }
+
+        resampler_name = f"LNE({k})"
+
+        trial_name = f"{dataset_name}_{fold}_{classifier_name}_{resampler_name}"
         trial_path = RESULTS_PATH / f"{trial_name}.csv"
 
         if trial_path.exists():
@@ -44,15 +52,21 @@ def evaluate_trial(k, fold):
 
         rows = []
 
-        for classifier_name in classifiers.keys():
-            logging.info(f"Evaluating {classifier_name}...")
+        for criterion_name, criterion in criteria.items():
+            logging.info(f"Evaluating for {criterion_name}...")
 
             dataset = datasets.load(dataset_name)
             classifier = classifiers[classifier_name]
 
             (X_train, y_train), (X_test, y_test) = dataset[fold][0], dataset[fold][1]
 
-            resampler = LNE(k=k, estimator=classifier, random_state=RANDOM_STATE)
+            resampler = LNE(
+                k=k,
+                estimator=classifier,
+                metric=criterion,
+                metric_proba=(criterion_name == "AUC"),
+                random_state=RANDOM_STATE,
+            )
 
             assert len(np.unique(y_train)) == len(np.unique(y_test)) == 2
 
@@ -64,7 +78,8 @@ def evaluate_trial(k, fold):
                 continue
 
             stats_path = (
-                STATS_PATH / f"{dataset_name}_{fold}_{classifier_name}_LNE_{k}.p"
+                STATS_PATH
+                / f"{dataset_name}_{fold}_{classifier_name}_{resampler_name}_{criterion_name}.p"
             )
             stats = {
                 "encoding_mask": resampler.encoding_mask,
@@ -102,13 +117,22 @@ def evaluate_trial(k, fold):
                     dataset_name,
                     fold,
                     classifier_name,
-                    f"LNE({k})",
+                    resampler_name,
+                    criterion_name,
                     scoring_function_name,
                     score,
                 ]
                 rows.append(row)
 
-        columns = ["Dataset", "Fold", "Classifier", "Resampler", "Metric", "Score"]
+        columns = [
+            "Dataset",
+            "Fold",
+            "Classifier",
+            "Resampler",
+            "Criterion",
+            "Metric",
+            "Score",
+        ]
 
         pd.DataFrame(rows, columns=columns).to_csv(trial_path, index=False)
 
@@ -118,9 +142,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-fold", type=int)
-    parser.add_argument("-k", type=int)
+    parser.add_argument("-classifier_name", type=str, required=True)
+    parser.add_argument("-fold", type=int, required=True)
+    parser.add_argument("-k", type=int, required=True)
 
     args = parser.parse_args()
 
-    evaluate_trial(args.k, args.fold)
+    evaluate_trial(args.classifier_name, args.k, args.fold)
