@@ -1,45 +1,24 @@
-import argparse
 import logging
 from collections import Counter
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import smote_variants as sv
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.neural_network import MLPClassifier
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
 
+import config
 import datasets
-import metrics
+from cv import ResamplingCV
 
 
-def evaluate_trial(resampler_name, fold):
-    RESULTS_PATH = Path(__file__).parents[0] / "results"
-    RANDOM_STATE = 42
-
-    resamplers = {
-        "SMOTE": sv.SMOTE(random_state=RANDOM_STATE),
-        "polynom-fit-SMOTE": sv.polynom_fit_SMOTE(random_state=RANDOM_STATE),
-        "Lee": sv.Lee(random_state=RANDOM_STATE),
-        "SMOBD": sv.SMOBD(random_state=RANDOM_STATE),
-        "G-SMOTE": sv.G_SMOTE(random_state=RANDOM_STATE),
-        "LVQ-SMOTE": sv.LVQ_SMOTE(random_state=RANDOM_STATE),
-        "Assembled-SMOTE": sv.Assembled_SMOTE(random_state=RANDOM_STATE),
-        "SMOTE-TomekLinks": sv.SMOTE_TomekLinks(random_state=RANDOM_STATE),
-    }
+def evaluate_trial(classifier_name, resampler_name, fold):
+    config.RESULTS_PATH.mkdir(exist_ok=True, parents=True)
 
     for dataset_name in datasets.names():
-        classifiers = {
-            "CART": DecisionTreeClassifier(random_state=RANDOM_STATE),
-            "KNN": KNeighborsClassifier(n_neighbors=1),
-            "SVM": SVC(kernel="rbf", random_state=RANDOM_STATE),
-            # "MLP": MLPClassifier(random_state=RANDOM_STATE),
-        }
+        classifiers = config.get_classifiers()
+        criteria = config.get_criteria()
+        resamplers = config.get_reference_resamplers()
 
-        trial_name = f"{dataset_name}_{fold}_{resampler_name}"
-        trial_path = RESULTS_PATH / f"{trial_name}.csv"
+        trial_name = f"{dataset_name}_{fold}_{classifier_name}_{resampler_name}"
+        trial_path = config.RESULTS_PATH / f"{trial_name}.csv"
 
         if trial_path.exists():
             logging.info(f"Skipping {trial_name} (results already present)...")
@@ -48,34 +27,40 @@ def evaluate_trial(resampler_name, fold):
 
         logging.info(f"Evaluating {trial_name}...")
 
-        dataset = datasets.load(dataset_name)
-
-        (X_train, y_train), (X_test, y_test) = dataset[fold][0], dataset[fold][1]
-
-        resampler = resamplers[resampler_name]
-
-        assert len(np.unique(y_train)) == len(np.unique(y_test)) == 2
-
-        minority_class = Counter(y_test).most_common()[-1][0]
-
-        X_train, y_train = resampler.sample(X_train, y_train)
-
         rows = []
 
-        for classifier_name in classifiers.keys():
+        for criterion_name, criterion in criteria.items():
+            logging.info(f"Evaluating for {criterion_name}...")
+
+            dataset = datasets.load(dataset_name)
             classifier = classifiers[classifier_name]
+
+            (X_train, y_train), (X_test, y_test) = dataset[fold][0], dataset[fold][1]
+
+            resampler = ResamplingCV(
+                algorithm=resamplers[resampler_name],
+                classifier=classifier,
+                metric=criterion,
+                metric_proba=(criterion_name == "AUC"),
+                seed=config.RANDOM_STATE,
+                proportion=[0.1, 0.2, 0.5, 1.0, 2.0, 5.0],
+                random_state=[config.RANDOM_STATE],
+            )
+
+            assert len(np.unique(y_train)) == len(np.unique(y_test)) == 2
+
+            minority_class = Counter(y_test).most_common()[-1][0]
+
+            try:
+                X_train, y_train = resampler.fit_resample(X_train, y_train)
+            except RuntimeError:
+                continue
 
             clf = classifier.fit(X_train, y_train)
             predictions = clf.predict(X_test)
             proba = clf.predict_proba(X_test)[:, int(minority_class)]
 
-            scoring_functions = {
-                "Precision": metrics.precision,
-                "Recall": metrics.recall,
-                "AUC": metrics.auc,
-                "BAC": metrics.bac,
-                "G-mean": metrics.g_mean,
-            }
+            scoring_functions = config.get_scoring_functions()
 
             for scoring_function_name in scoring_functions.keys():
                 if scoring_function_name == "AUC":
@@ -90,14 +75,21 @@ def evaluate_trial(resampler_name, fold):
                     fold,
                     classifier_name,
                     resampler_name,
+                    criterion_name,
                     scoring_function_name,
                     score,
                 ]
                 rows.append(row)
 
-        columns = ["Dataset", "Fold", "Classifier", "Resampler", "Metric", "Score"]
-
-        RESULTS_PATH.mkdir(exist_ok=True, parents=True)
+        columns = [
+            "Dataset",
+            "Fold",
+            "Classifier",
+            "Resampler",
+            "Criterion",
+            "Metric",
+            "Score",
+        ]
 
         pd.DataFrame(rows, columns=columns).to_csv(trial_path, index=False)
 
@@ -105,11 +97,7 @@ def evaluate_trial(resampler_name, fold):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("-fold", type=int)
-    parser.add_argument("-resampler_name", type=str)
-
-    args = parser.parse_args()
-
-    evaluate_trial(args.resampler_name, args.fold)
+    for classifier_name in config.get_classifiers().keys():
+        for resampler_name in config.get_reference_resamplers().keys():
+            for fold in range(10):
+                evaluate_trial(classifier_name, resampler_name, fold)
