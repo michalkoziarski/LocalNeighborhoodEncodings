@@ -1,3 +1,4 @@
+import argparse
 import logging
 from collections import Counter
 
@@ -98,7 +99,12 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     logging.getLogger("smote_variants").disabled = True
 
-    for classifier_name in config.get_classifiers().keys():
-        for resampler_name in config.get_reference_resamplers().keys():
-            for fold in range(10):
-                evaluate_trial(classifier_name, resampler_name, fold)
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-classifier_name", type=str, required=True)
+    parser.add_argument("-fold", type=int, required=True)
+
+    args = parser.parse_args()
+
+    for resampler_name in config.get_reference_resamplers().keys():
+        evaluate_trial(args.classifier_name, resampler_name, args.fold)
