@@ -165,6 +165,7 @@ def _use_counts_to_resample_dataset(
     X: np.ndarray,
     y: np.ndarray,
     *,
+    oversampler: str,
     eps: float,
     neighbors_vector: np.ndarray,
     minority_class: int,
@@ -175,6 +176,12 @@ def _use_counts_to_resample_dataset(
     with noise based on the provided resampling counts dictionary.
     """
     X_, y_ = [], []
+    X_min = X[y == minority_class]
+
+    if oversampler == "smote":
+        nn = NearestNeighbors(n_neighbors=min(6, len(X_min))).fit(X_min)
+    else:
+        nn = None
 
     for n_neighbors, count in resampling_counts["oversampling"].items():
         indices = np.where((y == minority_class) & (neighbors_vector == n_neighbors))[0]
@@ -187,8 +194,26 @@ def _use_counts_to_resample_dataset(
 
         if count is not None and count > 0:
             sample_indices = np.random.choice(indices, size=count, replace=True)
-            samples = X[sample_indices]
-            samples += np.random.normal(size=samples.shape, scale=eps)
+
+            if oversampler == "ros":
+                samples = X[sample_indices]
+                samples += np.random.normal(size=samples.shape, scale=eps)
+            elif oversampler == "smote":
+                samples = []
+
+                for index, n in Counter(sample_indices).items():
+                    sample = X[index]
+                    neighbors = X_min[
+                        nn.kneighbors([sample], return_distance=False)[0, 1:]
+                    ]
+
+                    for _ in range(n):
+                        neighbor = neighbors[np.random.randint(len(neighbors))]
+                        samples.append(sample + np.random.rand() * (neighbor - sample))
+
+                samples = np.array(samples)
+            else:
+                raise NotImplementedError
 
             X_.append(samples)
             y_.append(y[sample_indices])
@@ -217,6 +242,7 @@ def _use_individual_to_resample_dataset(
     X: np.ndarray,
     y: np.ndarray,
     *,
+    oversampler: str,
     max_oversampling_proportion: float,
     eps: float,
     neighbors_vector: np.ndarray,
@@ -247,6 +273,7 @@ def _use_individual_to_resample_dataset(
         resampling_counts,
         X,
         y,
+        oversampler=oversampler,
         eps=eps,
         neighbors_vector=neighbors_vector,
         minority_class=minority_class,
@@ -273,6 +300,7 @@ class _LNEProblem(ElementwiseProblem):
         n_splits: int,
         n_repeats: int,
         estimator: BaseEstimator,
+        oversampler: str,
         max_oversampling_proportion: float,
         eps: float,
         metric: callable,
@@ -281,6 +309,7 @@ class _LNEProblem(ElementwiseProblem):
         encoding_mask: dict[str, dict[int, bool]],
     ):
         assert splitting_strategy in ["none", "random"]
+        assert oversampler in ["ros", "smote"]
 
         self.X = X
         self.y = y
@@ -288,6 +317,7 @@ class _LNEProblem(ElementwiseProblem):
         self.n_splits = n_splits
         self.n_repeats = n_repeats
         self.estimator = estimator
+        self.oversampler = oversampler
         self.max_oversampling_proportion = max_oversampling_proportion
         self.eps = eps
         self.metric = metric
@@ -326,6 +356,7 @@ class _LNEProblem(ElementwiseProblem):
                     x,
                     X_train,
                     y_train,
+                    oversampler=self.oversampler,
                     max_oversampling_proportion=self.max_oversampling_proportion,
                     eps=self.eps,
                     neighbors_vector=neighbors_vector,
@@ -361,6 +392,7 @@ class LNE:
         self,
         estimator: BaseEstimator,
         k: int = 5,
+        oversampler: str = "ros",
         max_oversampling_proportion: float = 5.0,
         splitting_strategy: str = "random",
         n_splits: int = 2,
@@ -375,6 +407,7 @@ class LNE:
     ):
         self.estimator = estimator
         self.k = k
+        self.oversampler = oversampler
         self.max_oversampling_proportion = max_oversampling_proportion
         self.splitting_strategy = splitting_strategy
         self.n_splits = n_splits
@@ -425,6 +458,7 @@ class LNE:
             n_splits=self.n_splits,
             n_repeats=self.n_repeats,
             estimator=self.estimator,
+            oversampler=self.oversampler,
             max_oversampling_proportion=self.max_oversampling_proportion,
             eps=self.eps,
             metric=self.metric,
@@ -460,6 +494,7 @@ class LNE:
             self.solution,
             X,
             y,
+            oversampler=self.oversampler,
             max_oversampling_proportion=self.max_oversampling_proportion,
             eps=self.eps,
             neighbors_vector=self.neighbors_vector,

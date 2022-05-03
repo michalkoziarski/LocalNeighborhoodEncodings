@@ -11,7 +11,7 @@ import datasets
 from algorithm import LNE
 
 
-def evaluate_trial(classifier_name, eps, k, fold):
+def evaluate_trial(classifier_name, oversampler_name, eps, k, fold):
     for path in [config.RESULTS_PATH, config.STATS_PATH]:
         path.mkdir(exist_ok=True, parents=True)
 
@@ -19,7 +19,10 @@ def evaluate_trial(classifier_name, eps, k, fold):
         classifiers = config.get_classifiers()
         criteria = config.get_criteria()
 
-        resampler_name = f"LNE({k};{eps:.2f})"
+        if oversampler_name == "ros":
+            resampler_name = f"LNE({k};ros-{eps:.2f})"
+        else:
+            resampler_name = f"LNE({k};{oversampler_name})"
 
         trial_name = f"{dataset_name}_{fold}_{classifier_name}_{resampler_name}"
         trial_path = config.RESULTS_PATH / f"{trial_name}.csv"
@@ -43,6 +46,7 @@ def evaluate_trial(classifier_name, eps, k, fold):
 
             resampler = LNE(
                 k=k,
+                oversampler=oversampler_name,
                 eps=eps,
                 estimator=classifier,
                 metric=criterion,
@@ -116,10 +120,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-classifier_name", type=str, required=True)
-    parser.add_argument("-eps", type=float, required=True)
+    parser.add_argument("-eps", type=float, required=False)
     parser.add_argument("-fold", type=int, required=True)
     parser.add_argument("-k", type=int, required=True)
+    parser.add_argument("-oversampler_name", type=str, required=True)
 
     args = parser.parse_args()
 
-    evaluate_trial(args.classifier_name, args.eps, args.k, args.fold)
+    evaluate_trial(
+        args.classifier_name, args.oversampler_name, args.eps, args.k, args.fold
+    )
