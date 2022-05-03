@@ -29,6 +29,7 @@ def get_criteria():
         "AUC": metrics.auc,
         "BAC": metrics.bac,
         "G-mean": metrics.g_mean,
+        "F-beta": metrics.f_beta,
     }
 
     return criteria
@@ -41,6 +42,7 @@ def get_scoring_functions():
         "AUC": metrics.auc,
         "BAC": metrics.bac,
         "G-mean": metrics.g_mean,
+        "F-beta": metrics.f_beta,
     }
 
     return scoring_functions
