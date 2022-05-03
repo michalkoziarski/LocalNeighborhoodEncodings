@@ -9,6 +9,7 @@ from sklearn.tree import DecisionTreeClassifier
 import metrics
 
 RESULTS_PATH = Path(__file__).parents[0] / "results"
+STATS_PATH = Path(__file__).parents[0] / "stats"
 RANDOM_STATE = 42
 
 

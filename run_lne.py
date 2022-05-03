@@ -2,46 +2,27 @@ import argparse
 import logging
 import pickle
 from collections import Counter
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.neural_network import MLPClassifier
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
 
+import config
 import datasets
-import metrics
 from algorithm import LNE
 
 
 def evaluate_trial(classifier_name, eps, k, fold):
-    RESULTS_PATH = Path(__file__).parents[0] / "results"
-    STATS_PATH = Path(__file__).parents[0] / "stats"
-    RANDOM_STATE = 42
-
-    for path in [RESULTS_PATH, STATS_PATH]:
+    for path in [config.RESULTS_PATH, config.STATS_PATH]:
         path.mkdir(exist_ok=True, parents=True)
 
     for dataset_name in datasets.names():
-        classifiers = {
-            "CART": DecisionTreeClassifier(random_state=RANDOM_STATE),
-            "KNN": KNeighborsClassifier(n_neighbors=1),
-            "SVM": SVC(kernel="rbf", probability=True, random_state=RANDOM_STATE),
-            "MLP": MLPClassifier(random_state=RANDOM_STATE),
-        }
-
-        criteria = {
-            "AUC": metrics.auc,
-            "BAC": metrics.bac,
-            "G-mean": metrics.g_mean,
-        }
+        classifiers = config.get_classifiers()
+        criteria = config.get_criteria()
 
         resampler_name = f"LNE({k};{eps:.2f})"
 
         trial_name = f"{dataset_name}_{fold}_{classifier_name}_{resampler_name}"
-        trial_path = RESULTS_PATH / f"{trial_name}.csv"
+        trial_path = config.RESULTS_PATH / f"{trial_name}.csv"
 
         if trial_path.exists():
             logging.info(f"Skipping {trial_name} (results already present)...")
@@ -66,7 +47,7 @@ def evaluate_trial(classifier_name, eps, k, fold):
                 estimator=classifier,
                 metric=criterion,
                 metric_proba=(criterion_name == "AUC"),
-                random_state=RANDOM_STATE,
+                random_state=config.RANDOM_STATE,
             )
 
             assert len(np.unique(y_train)) == len(np.unique(y_test)) == 2
@@ -78,10 +59,7 @@ def evaluate_trial(classifier_name, eps, k, fold):
             except RuntimeError:
                 continue
 
-            stats_path = (
-                STATS_PATH
-                / f"{dataset_name}_{fold}_{classifier_name}_{resampler_name}_{criterion_name}.p"
-            )
+            stats_path = config.STATS_PATH / f"{trial_name}_{criterion_name}.p"
             stats = {
                 "encoding_mask": resampler.encoding_mask,
                 "neighbors_vector": resampler.neighbors_vector,
@@ -98,13 +76,7 @@ def evaluate_trial(classifier_name, eps, k, fold):
             predictions = clf.predict(X_test)
             proba = clf.predict_proba(X_test)[:, int(minority_class)]
 
-            scoring_functions = {
-                "Precision": metrics.precision,
-                "Recall": metrics.recall,
-                "AUC": metrics.auc,
-                "BAC": metrics.bac,
-                "G-mean": metrics.g_mean,
-            }
+            scoring_functions = config.get_scoring_functions()
 
             for scoring_function_name in scoring_functions.keys():
                 if scoring_function_name == "AUC":
