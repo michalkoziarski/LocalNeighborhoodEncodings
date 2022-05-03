@@ -96,6 +96,7 @@ def evaluate_trial(classifier_name, resampler_name, fold):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger("smote_variants").disabled = True
 
     for classifier_name in config.get_classifiers().keys():
         for resampler_name in config.get_reference_resamplers().keys():
