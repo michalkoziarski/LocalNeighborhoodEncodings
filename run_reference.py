@@ -1,5 +1,6 @@
 import argparse
 import logging
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -55,6 +56,8 @@ def evaluate_trial(resampler_name, fold):
 
         assert len(np.unique(y_train)) == len(np.unique(y_test)) == 2
 
+        minority_class = Counter(y_test).most_common()[-1][0]
+
         X_train, y_train = resampler.sample(X_train, y_train)
 
         rows = []
@@ -64,6 +67,7 @@ def evaluate_trial(resampler_name, fold):
 
             clf = classifier.fit(X_train, y_train)
             predictions = clf.predict(X_test)
+            proba = clf.predict_proba(X_test)[:, int(minority_class)]
 
             scoring_functions = {
                 "Precision": metrics.precision,
@@ -74,7 +78,13 @@ def evaluate_trial(resampler_name, fold):
             }
 
             for scoring_function_name in scoring_functions.keys():
-                score = scoring_functions[scoring_function_name](y_test, predictions)
+                if scoring_function_name == "AUC":
+                    score = scoring_functions[scoring_function_name](y_test, proba)
+                else:
+                    score = scoring_functions[scoring_function_name](
+                        y_test, predictions
+                    )
+
                 row = [
                     dataset_name,
                     fold,
