@@ -105,6 +105,7 @@ def _individual_to_ratio_and_neighborhood_encoding(
 def _neighborhood_encoding_to_resampling_counts(
     y: np.ndarray,
     neighbors_vector: np.ndarray,
+    max_oversampling_proportion: float,
     oversampling_ratio: float,
     neighborhood_encoding: dict[str, dict[int, Optional[float]]],
     minority_class: int,
@@ -136,7 +137,11 @@ def _neighborhood_encoding_to_resampling_counts(
     n_minority = sum(y == minority_class)
     n_majority = sum(y == majority_class)
 
-    n_oversampling = int(np.round((n_majority - n_minority) * oversampling_ratio))
+    n_oversampling = int(
+        np.round(
+            (n_majority - n_minority) * oversampling_ratio * max_oversampling_proportion
+        )
+    )
 
     total = sum(
         value
@@ -212,6 +217,7 @@ def _use_individual_to_resample_dataset(
     X: np.ndarray,
     y: np.ndarray,
     *,
+    max_oversampling_proportion: float,
     eps: float,
     neighbors_vector: np.ndarray,
     encoding_mask: dict[str, dict[int, bool]],
@@ -230,6 +236,7 @@ def _use_individual_to_resample_dataset(
     resampling_counts = _neighborhood_encoding_to_resampling_counts(
         y,
         neighbors_vector,
+        max_oversampling_proportion,
         oversampling_ratio,
         neighborhood_encoding,
         minority_class,
@@ -266,6 +273,7 @@ class _LNEProblem(ElementwiseProblem):
         n_splits: int,
         n_repeats: int,
         estimator: BaseEstimator,
+        max_oversampling_proportion: float,
         eps: float,
         metric: callable,
         metric_proba: bool,
@@ -280,6 +288,7 @@ class _LNEProblem(ElementwiseProblem):
         self.n_splits = n_splits
         self.n_repeats = n_repeats
         self.estimator = estimator
+        self.max_oversampling_proportion = max_oversampling_proportion
         self.eps = eps
         self.metric = metric
         self.metric_proba = metric_proba
@@ -317,6 +326,7 @@ class _LNEProblem(ElementwiseProblem):
                     x,
                     X_train,
                     y_train,
+                    max_oversampling_proportion=self.max_oversampling_proportion,
                     eps=self.eps,
                     neighbors_vector=neighbors_vector,
                     encoding_mask=self.encoding_mask,
@@ -351,12 +361,13 @@ class LNE:
         self,
         estimator: BaseEstimator,
         k: int = 5,
+        max_oversampling_proportion: float = 5.0,
         splitting_strategy: str = "random",
         n_splits: int = 2,
         n_repeats: int = 3,
         algorithm: Type[Algorithm] = DE,
         algorithm_kwargs: Optional[dict] = None,
-        eps: float = 0.0,
+        eps: float = 0.1,
         metric: callable = auc,
         metric_proba: bool = True,
         verbose: bool = False,
@@ -364,6 +375,7 @@ class LNE:
     ):
         self.estimator = estimator
         self.k = k
+        self.max_oversampling_proportion = max_oversampling_proportion
         self.splitting_strategy = splitting_strategy
         self.n_splits = n_splits
         self.n_repeats = n_repeats
@@ -413,6 +425,7 @@ class LNE:
             n_splits=self.n_splits,
             n_repeats=self.n_repeats,
             estimator=self.estimator,
+            max_oversampling_proportion=self.max_oversampling_proportion,
             eps=self.eps,
             metric=self.metric,
             metric_proba=self.metric_proba,
@@ -436,6 +449,7 @@ class LNE:
         self.resampling_counts = _neighborhood_encoding_to_resampling_counts(
             y,
             self.neighbors_vector,
+            self.max_oversampling_proportion,
             self.oversampling_ratio,
             self.neighborhood_encoding,
             minority_class,
@@ -446,6 +460,7 @@ class LNE:
             self.solution,
             X,
             y,
+            max_oversampling_proportion=self.max_oversampling_proportion,
             eps=self.eps,
             neighbors_vector=self.neighbors_vector,
             encoding_mask=self.encoding_mask,
