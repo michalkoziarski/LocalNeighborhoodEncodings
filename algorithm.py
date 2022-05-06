@@ -10,7 +10,7 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.neighbors import NearestNeighbors
 
-from metrics import auc
+from metrics import bac
 
 
 def _get_n_same_class_neighbors_vector(
@@ -391,8 +391,8 @@ class LNE:
     def __init__(
         self,
         estimator: BaseEstimator,
-        k: int = 5,
-        oversampler: str = "ros",
+        k: int = 4,
+        oversampler: str = "smote",
         max_oversampling_proportion: float = 5.0,
         splitting_strategy: str = "random",
         n_splits: int = 2,
@@ -400,7 +400,7 @@ class LNE:
         algorithm: Type[Algorithm] = DE,
         algorithm_kwargs: Optional[dict] = None,
         eps: float = 0.1,
-        metric: callable = auc,
+        metric: callable = bac,
         metric_proba: bool = True,
         verbose: bool = False,
         random_state: Optional[Union[int, np.random.RandomState]] = None,
