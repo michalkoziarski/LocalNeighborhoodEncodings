@@ -401,7 +401,7 @@ class LNE:
         algorithm_kwargs: Optional[dict] = None,
         eps: float = 0.1,
         metric: callable = bac,
-        metric_proba: bool = True,
+        metric_proba: bool = False,
         verbose: bool = False,
         random_state: Optional[Union[int, np.random.RandomState]] = None,
     ):
