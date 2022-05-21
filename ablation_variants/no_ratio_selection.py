@@ -1,4 +1,3 @@
-from collections import Counter
 from typing import Optional, Type, Union
 
 import numpy as np
@@ -8,98 +7,16 @@ from pymoo.core.problem import ElementwiseProblem
 from pymoo.optimize import minimize
 from sklearn.base import BaseEstimator, clone
 from sklearn.model_selection import RepeatedStratifiedKFold
-from sklearn.neighbors import NearestNeighbors
 
+from algorithm import (
+    _get_encoding_mask,
+    _get_minority_and_majority_class,
+    _get_n_same_class_neighbors_vector,
+    _get_number_of_unmasked_entries,
+    _individual_to_ratio_and_neighborhood_encoding,
+    _use_counts_to_resample_dataset,
+)
 from metrics import bac
-
-
-def _get_n_same_class_neighbors_vector(
-    X: np.ndarray, y: np.ndarray, k: int
-) -> np.ndarray:
-    """
-    Helper function returning a vector of same-class neighbor counts. i-th element
-    of the vector contains the number of observations in the k-neighborhood of i-th
-    observation having the same class label as the i-th observation.
-
-    Note that it assumes that there will be no observations with exactly the same
-    features, but opposite class label: in that case the results might be distorted.
-    """
-    neighbors_vector = np.empty(len(y), dtype=np.uint)
-    nn = NearestNeighbors(n_neighbors=(k + 1)).fit(X)
-
-    for i, (X_i, y_i) in enumerate(zip(X, y)):
-        indices = nn.kneighbors([X_i], return_distance=False)[0, 1:]
-        neighbors_vector[i] = np.sum(y[indices] == y_i)
-
-    return neighbors_vector
-
-
-def _get_encoding_mask(
-    y: np.ndarray,
-    k: int,
-    neighbors_vector: np.ndarray,
-    minority_class: int,
-    majority_class: int,
-) -> dict[str, dict[int, bool]]:
-    """
-    Helper for calculating encoding mask, containing the information about which
-    types of observation are present in the dataset for both majority and the
-    minority class. Used to exclude unavailable types of observations from the
-    final neighborhood encoding.
-    """
-    mask = {"oversampling": {}, "undersampling": {}}
-
-    for i in range(k + 1):
-        for resampling, cls in zip(mask.keys(), [minority_class, majority_class]):
-            if i in neighbors_vector[y == cls]:
-                mask[resampling][i] = True
-            else:
-                mask[resampling][i] = False
-
-    return mask
-
-
-def _get_number_of_unmasked_entries(encoding_mask: dict[str, dict[int, bool]]) -> int:
-    """
-    Helper counting the number of nested dictionary values in the encoding
-    mask set to true.
-    """
-    return sum([sum(mask.values()) for mask in encoding_mask.values()])
-
-
-def _individual_to_ratio_and_neighborhood_encoding(
-    individual: np.ndarray, encoding_mask: dict[str, dict[int, bool]]
-) -> tuple[float, dict[str, dict[int, Optional[float]]]]:
-    """
-    Helper for converting a real-valued vector describing an individual to
-    oversampling ratio and an easier to interpret and operate on dictionary.
-    Uses encoding mask to exclude types of observations not available in the
-    particular dataset.
-    """
-    encoding = {"oversampling": {}, "undersampling": {}}
-
-    n_unmasked_values = _get_number_of_unmasked_entries(encoding_mask)
-
-    if n_unmasked_values + 1 != len(individual):
-        raise ValueError(
-            f"The number of unmasked values ({n_unmasked_values}) + 1 (ratio) "
-            f"does not match the length of the individual ({len(individual)}) "
-            f"for the mask = {encoding_mask}."
-        )
-
-    oversampling_ratio = individual[0]
-
-    position = 1
-
-    for resampling in encoding_mask.keys():
-        for i, is_present in encoding_mask[resampling].items():
-            if is_present:
-                encoding[resampling][i] = individual[position]
-                position += 1
-            else:
-                encoding[resampling][i] = None
-
-    return oversampling_ratio, encoding
 
 
 def _neighborhood_encoding_to_resampling_counts(
@@ -165,83 +82,6 @@ def _neighborhood_encoding_to_resampling_counts(
     return counts
 
 
-def _use_counts_to_resample_dataset(
-    resampling_counts: dict[str, dict[int, Optional[int]]],
-    X: np.ndarray,
-    y: np.ndarray,
-    *,
-    oversampler: str,
-    eps: float,
-    neighbors_vector: np.ndarray,
-    minority_class: int,
-    majority_class: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Performs a combination of random undersampling and random oversampling
-    with noise based on the provided resampling counts dictionary.
-    """
-    X_, y_ = [], []
-    X_min = X[y == minority_class]
-
-    if oversampler == "smote":
-        nn = NearestNeighbors(n_neighbors=min(6, len(X_min))).fit(X_min)
-    else:
-        nn = None
-
-    for n_neighbors, count in resampling_counts["oversampling"].items():
-        indices = np.where((y == minority_class) & (neighbors_vector == n_neighbors))[0]
-
-        if len(indices) == 0:
-            continue
-
-        X_.append(X[indices])
-        y_.append(y[indices])
-
-        if count is not None and count > 0:
-            sample_indices = np.random.choice(indices, size=count, replace=True)
-
-            if oversampler == "ros":
-                samples = X[sample_indices]
-                samples += np.random.normal(size=samples.shape, scale=eps)
-            elif oversampler == "smote":
-                samples = []
-
-                for index, n in Counter(sample_indices).items():
-                    sample = X[index]
-                    neighbors = X_min[
-                        nn.kneighbors([sample], return_distance=False)[0, 1:]
-                    ]
-
-                    for _ in range(n):
-                        neighbor = neighbors[np.random.randint(len(neighbors))]
-                        samples.append(sample + np.random.rand() * (neighbor - sample))
-
-                samples = np.array(samples)
-            else:
-                raise NotImplementedError
-
-            X_.append(samples)
-            y_.append(y[sample_indices])
-
-    for n_neighbors, count in resampling_counts["undersampling"].items():
-        if count is None:
-            continue
-
-        indices = np.where((y == majority_class) & (neighbors_vector == n_neighbors))[0]
-
-        if len(indices) == 0:
-            continue
-
-        sample_indices = np.random.choice(
-            indices, size=(len(indices) - count), replace=False
-        )
-
-        X_.append(X[sample_indices])
-        y_.append(y[sample_indices])
-
-    return np.concatenate(X_), np.concatenate(y_)
-
-
 def _use_individual_to_resample_dataset(
     individual: np.ndarray,
     X: np.ndarray,
@@ -286,13 +126,6 @@ def _use_individual_to_resample_dataset(
     )
 
     return X_, y_
-
-
-def _get_minority_and_majority_class(y: np.ndarray) -> tuple[int, int]:
-    minority_class = Counter(y).most_common()[1][0]
-    majority_class = Counter(y).most_common()[0][0]
-
-    return minority_class, majority_class
 
 
 class _LNEProblem(ElementwiseProblem):
